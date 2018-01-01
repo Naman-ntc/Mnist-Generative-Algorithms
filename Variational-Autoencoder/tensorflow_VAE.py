@@ -39,21 +39,37 @@ class VariationalAutoEncoder():
 		self.z_sampled = tf.add(tf.multiply(self.z_sampled,std),self.mean)	
 		self.decoded = self.Decoder()
 		
-		generation_loss = -tf.reduce_sum(self.x * tf.log(1e-8 + self.decoded) + (1-self.x) * tf.log(1e-8 + 1 - self.decoded),1)
-		generation_loss = tf.reduce_mean(generation_loss)
+		# generation_loss = -tf.reduce_sum(self.x * tf.log(1e-10 + self.decoded) + (1-self.x) * tf.log(1e-10 + 1 - self.decoded),axis=1)
+		# generation_loss = tf.reduce_mean(generation_loss)
 		
 
-		latent_loss = 0.5*tf.reduce_sum(tf.square(self.mean) + tf.exp(self.log_std_sqd) - self.log_std_sqd + 1)
-		latent_loss = tf.reduce_mean(latent_loss)
+		# latent_loss = 0.5*tf.reduce_sum(tf.square(self.mean) + tf.exp(self.log_std_sqd) - self.log_std_sqd + 1,axis=1)
+		# latent_loss = tf.reduce_sum(latent_loss)
 		
+		# loss = tf.add(generation_loss,latent_loss)
 
-		loss = tf.add(generation_loss,latent_loss)
-
-		self.latent_loss,self.generation_loss,self.loss = latent_loss,generation_loss,loss
+		# self.latent_loss,self.generation_loss,self.loss = latent_loss,generation_loss,loss
 
 		
-		optimizer = tf.train.RMSPropOptimizer(3e-4)
-		self.update = optimizer.minimize(self.loss)
+		# optimizer = tf.train.AdamOptimizer(1e-3)
+		# self.update = optimizer.minimize(self.loss)
+		epsilon = 1e-10
+		recon_loss = -tf.reduce_sum(
+			self.x * tf.log(epsilon+self.decoded) + (1-self.x) * tf.log(epsilon+1-self.decoded),
+			axis=1
+		)
+		self.generation_loss = tf.reduce_mean(recon_loss)
+
+		# Latent loss
+		# Kullback Leibler divergence: measure the difference between two distributions
+		# Here we measure the divergence between the latent distribution and N(0, 1)
+		latent_loss = -0.5 * tf.reduce_sum(
+			1 + self.log_std_sqd - tf.square(self.mean) - tf.exp(self.log_std_sqd), axis=1)
+		self.latent_loss = tf.reduce_mean(latent_loss)
+
+		self.loss = tf.reduce_mean(recon_loss + latent_loss)
+		self.update = tf.train.AdamOptimizer(
+			learning_rate=1e-4).minimize(self.loss)
 		return
 
 	def Run_a_Batch(self,batch):
@@ -78,18 +94,19 @@ class VariationalAutoEncoder():
 
 
 
-epochs = 1
-batch_size = 50
+epochs = 101
+batch_size = 100
 num_sample = mnist.train.num_examples
-num_runs_in_epoch = 1000#ceil(num_sample/batch_size) + 5
+num_runs_in_epoch = ceil(num_sample/batch_size) + 2
 
-model = VariationalAutoEncoder(10)
+model = VariationalAutoEncoder(5)
 
-for _ in range(epochs):
+for iter_temp in range(epochs):
 	for _ in range(num_runs_in_epoch):
 		batch = mnist.train.next_batch(batch_size)
-		total_loss,generation_loss,latent_loss = model.Run_a_Batch(batch[0])
-		print("%f + %f = %f"%(generation_loss,latent_loss,total_loss))
+		total_loss,generation_loss,latent_loss = model.Run_a_Batch(batch[0])	
+	if (iter_temp%5==0):
+		print("[Epoch %d] : %f + %f = %f"%(iter_temp,generation_loss,latent_loss,total_loss))
 
 
 batch = mnist.test.next_batch(5)
